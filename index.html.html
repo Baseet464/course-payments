@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>متابعة مدفوعات الكورس</title>
+<style>
+:root{
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+  --bg:#f5f6fa;--card:#fff;--text:#1d2433;--muted:#6b7487;--line:#dfe3ec;
+  --accent:#2f6fed;--accent-text:#fff;--ok:#12805c;--bad:#c62f3a;--warn:#b26a00;--head:#eef1f8;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#12151c;--card:#1b202b;--text:#e8ebf2;--muted:#9aa3b5;--line:#2c3342;
+    --accent:#5b8cff;--accent-text:#0d1220;--ok:#4cc79a;--bad:#ff7a84;--warn:#f0b04d;--head:#232a38;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#12151c;--card:#1b202b;--text:#e8ebf2;--muted:#9aa3b5;--line:#2c3342;
+  --accent:#5b8cff;--accent-text:#0d1220;--ok:#4cc79a;--bad:#ff7a84;--warn:#f0b04d;--head:#232a38;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:"Segoe UI",Tahoma,Arial,sans-serif;line-height:1.5}
+.wrap{max-width:1100px;margin:0 auto;padding:20px 14px 40px}
+h1{font-size:1.4rem;margin:0 0 4px}
+.sub{color:var(--muted);margin:0 0 14px;font-size:.9rem}
+.tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:8px}
+.tab{white-space:nowrap;border-radius:10px 10px 0 0;padding:9px 16px}
+.tab.on{background:var(--accent);color:var(--accent-text);border-color:var(--accent);font-weight:600}
+.tab.sum{margin-inline-start:auto}
+#tabs2 .tab{padding:6px 13px;font-size:.92rem}
+#tabs2 .tab.on{background:var(--head);color:var(--text);border-color:var(--accent)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.card small{color:var(--muted);display:block}
+.card b{font-size:1.25rem}
+.bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center}
+.bar label{color:var(--muted);font-size:.9rem}
+.bar input.rn{width:180px}
+button{font:inherit;cursor:pointer;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--text);padding:8px 14px}
+button.primary{background:var(--accent);color:var(--accent-text);border-color:var(--accent)}
+button.x{padding:4px 9px;color:var(--bad)}
+button.danger{color:var(--bad)}
+button.armed{background:var(--bad);color:#fff;border-color:var(--bad)}
+#addRow,#addCol,#addYear,#addRound{border:1.5px solid #1f9d6b}
+#delCol,#delYear,#delRound,button.x{border:1.5px solid #d33a46}
+#delYear.armed,#delRound.armed{border-color:#8f1d27}
+.tablebox{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow-x:auto;max-width:100%}
+table{border-collapse:collapse;width:100%;min-width:640px}
+th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:center;white-space:nowrap}
+thead th{background:var(--head);font-weight:600;font-size:.9rem}
+tfoot td{background:var(--head);font-weight:700;border-bottom:0}
+td.name,th.name{text-align:right}
+input{font:inherit;width:100%;min-width:90px;padding:7px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text);text-align:center}
+td.name input{text-align:right;min-width:150px}
+input:focus{outline:2px solid var(--accent);outline-offset:-1px}
+input.chk{width:20px;min-width:0;height:20px;padding:0;accent-color:var(--accent);cursor:pointer}
+.rem.zero{color:var(--ok)}.rem.pos{color:var(--bad)}.rem.neg{color:var(--warn)}
+.paid{color:var(--ok);font-weight:600}
+a.go{color:var(--accent);cursor:pointer;text-decoration:underline}
+tr.off td:not(:first-child){opacity:.45;text-decoration:line-through}
+.note{color:var(--muted);font-size:.8rem;margin-top:10px}
+@media print{.bar,.tabs,button.x,.note{display:none}body{background:#fff}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>متابعة مدفوعات الكورس</h1>
+  <p class="sub">التابات اللي فوق للسنين، وتحتها راوندات كل سنة. البيانات تتحفظ في متصفحك.</p>
+  <div class="tabs" id="tabs"></div>
+  <div id="ybar" class="bar"></div>
+  <div class="tabs" id="tabs2"></div>
+  <div id="view"></div>
+</div>
+
+<script>
+const KEY = 'course-payments-v1';
+const newRound = n => ({ name: 'الراوند ' + n, cols: 3, rows: [{ name: '', fee: '', pays: [] }] });
+const newYear = name => ({ name, rounds: [newRound(1)] });
+const thisYear = String(new Date().getFullYear());
+let S = { years: [], year: 0, active: 0 };
+
+try {
+  const raw = localStorage.getItem(KEY);
+  if (raw) {
+    const p = JSON.parse(raw);
+    if (p && Array.isArray(p.years)) S = p;
+    else if (p && Array.isArray(p.rounds)) S.years = [{ name: thisYear, rounds: p.rounds }]; // migrate
+    else if (p && Array.isArray(p.rows)) S.years = [{ name: thisYear, rounds: [{ name: 'الراوند 1', cols: p.cols || 3, rows: p.rows }] }];
+  }
+} catch (e) {}
+if (!S.years.length) S.years.push(newYear(thisYear));
+function fix() {
+  if (S.year !== 'all' && !S.years[S.year]) S.year = 0;
+  if (S.year !== 'all') {
+    const rs = S.years[S.year].rounds;
+    if (!rs.length) rs.push(newRound(1));
+    if (S.active !== 'sum' && !rs[S.active]) S.active = 0;
+  }
+}
+fix();
+
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} };
+const num = v => parseFloat(v) || 0;
+const fmt = n => n.toLocaleString('en-US', { maximumFractionDigits: 2 });
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const $ = id => document.getElementById(id);
+const yr = () => S.years[S.year];
+const cur = () => yr().rounds[S.active];
+
+function roundStats(r) {
+  let fee = 0, paid = 0;
+  r.rows.forEach(x => {
+    fee += num(x.fee);
+    for (let k = 0; k < r.cols; k++) paid += num(x.pays[k]);
+  });
+  return { fee, paid, rem: fee - paid };
+}
+
+function renderTabs() {
+  let h = S.years.map((y, i) =>
+    `<button class="tab ${S.year === i ? 'on' : ''}" data-year="${i}">${esc(y.name || 'سنة')}</button>`).join('');
+  h += '<button class="tab" id="addYear">+ سنة جديدة</button>';
+  h += `<button class="tab sum ${S.year === 'all' ? 'on' : ''}" data-year="all">📊 الإجمالي الكلي</button>`;
+  $('tabs').innerHTML = h;
+  if (S.year === 'all') {
+    $('ybar').style.display = 'none'; $('tabs2').style.display = 'none';
+    return;
+  }
+  $('ybar').style.display = ''; $('tabs2').style.display = '';
+  const y = yr();
+  $('ybar').innerHTML = `<label for="yn">اسم السنة:</label><input class="rn" id="yn" value="${esc(y.name)}">
+    <button class="danger" id="delYear">حذف السنة</button>`;
+  let h2 = y.rounds.map((r, i) =>
+    `<button class="tab ${S.active === i ? 'on' : ''}" data-tab="${i}">${esc(r.name || 'راوند')}</button>`).join('');
+  h2 += '<button class="tab" id="addRound">+ راوند جديد</button>';
+  h2 += `<button class="tab sum ${S.active === 'sum' ? 'on' : ''}" data-tab="sum">📊 إجمالي السنة</button>`;
+  $('tabs2').innerHTML = h2;
+}
+
+function render() {
+  fix(); renderTabs();
+  (S.year === 'all' || S.active === 'sum') ? renderSummary() : renderRound();
+}
+
+function renderRound() {
+  const r = cur();
+  let h = `
+  <div class="cards">
+    <div class="card"><small>إجمالي المطلوب</small><b id="cFee">0</b></div>
+    <div class="card"><small>إجمالي المدفوع</small><b id="cPaid" style="color:var(--ok)">0</b></div>
+    <div class="card"><small>إجمالي الباقي</small><b id="cRem" style="color:var(--bad)">0</b></div>
+    <div class="card"><small>عدد المشتركين</small><b id="cCnt">0</b></div>
+  </div>
+  <div class="bar">
+    <label for="rn">اسم الراوند:</label>
+    <input class="rn" id="rn" value="${esc(r.name)}">
+    <button id="addCol">+ إضافة دفعة</button>
+    <button id="delCol">− حذف آخر دفعة</button>
+    <button id="printBtn">طباعة</button>
+    <button class="danger" id="delRound">حذف الراوند</button>
+  </div>
+  <div class="tablebox"><table id="tbl">`;
+  h += '<thead><tr><th>#</th><th class="name">اسم المشترك</th><th>المبلغ المطلوب</th>';
+  for (let k = 0; k < r.cols; k++) h += `<th>الدفعة ${k + 1}</th>`;
+  h += '<th>إجمالي المدفوع</th><th>الباقي</th><th></th></tr></thead><tbody>';
+  r.rows.forEach((x, i) => {
+    h += `<tr><td>${i + 1}</td>
+      <td class="name"><input data-r="${i}" data-k="name" value="${esc(x.name)}" placeholder="الاسم"></td>
+      <td><input type="number" min="0" step="any" inputmode="decimal" data-r="${i}" data-k="fee" value="${esc(x.fee)}" placeholder="0"></td>`;
+    for (let k = 0; k < r.cols; k++)
+      h += `<td><input type="number" min="0" step="any" inputmode="decimal" data-r="${i}" data-k="p${k}" value="${esc(x.pays[k])}" placeholder="0"></td>`;
+    h += `<td class="paid" id="paid${i}">0</td><td class="rem" id="rem${i}">0</td>
+      <td><button class="x" data-del="${i}" title="حذف">✕</button></td></tr>`;
+  });
+  h += `<tr><td colspan="${r.cols + 6}" style="text-align:right"><button class="primary" id="addRow">+ إضافة مشترك</button></td></tr>`;
+  h += '</tbody><tfoot><tr><td></td><td class="name">المجموع</td><td id="tFee">0</td>';
+  for (let k = 0; k < r.cols; k++) h += `<td id="tp${k}">0</td>`;
+  h += '<td id="tPaid">0</td><td id="tRem">0</td><td></td></tr></tfoot></table></div>';
+  h += '<p class="note">الباقي = المبلغ المطلوب − إجمالي المدفوع. البرتقالي معناه إن المشترك دفع أكتر من المطلوب.</p>';
+  $('view').innerHTML = h;
+  calc();
+}
+
+function calc() {
+  const r = cur();
+  let tFee = 0, tPaid = 0, tRem = 0;
+  const colTotals = Array(r.cols).fill(0);
+  r.rows.forEach((x, i) => {
+    let paid = 0;
+    for (let k = 0; k < r.cols; k++) { const v = num(x.pays[k]); paid += v; colTotals[k] += v; }
+    const fee = num(x.fee), rem = fee - paid;
+    tFee += fee; tPaid += paid; tRem += rem;
+    $('paid' + i).textContent = fmt(paid);
+    const re = $('rem' + i);
+    re.textContent = fmt(rem);
+    re.className = 'rem ' + (Math.abs(rem) < 1e-9 ? 'zero' : rem > 0 ? 'pos' : 'neg');
+  });
+  $('tFee').textContent = fmt(tFee);
+  colTotals.forEach((v, k) => $('tp' + k).textContent = fmt(v));
+  $('tPaid').textContent = fmt(tPaid);
+  $('tRem').textContent = fmt(tRem);
+  $('cFee').textContent = fmt(tFee);
+  $('cPaid').textContent = fmt(tPaid);
+  $('cRem').textContent = fmt(tRem);
+  $('cCnt').textContent = r.rows.length;
+}
+
+function renderSummary() {
+  const all = S.year === 'all';
+  const list = [];
+  S.years.forEach((y, yi) => {
+    if (all || yi === S.year) y.rounds.forEach((r, ri) => list.push({ y, yi, r, ri }));
+  });
+  const T = { fee: 0, paid: 0, rem: 0, cnt: 0 };
+  let inc = 0;
+  const rows = list.map(({ y, yi, r, ri }, n) => {
+    const s = roundStats(r);
+    if (!r.off) { T.fee += s.fee; T.paid += s.paid; T.rem += s.rem; T.cnt += r.rows.length; inc++; }
+    return `<tr class="${r.off ? 'off' : ''}">
+      <td><input type="checkbox" class="chk" data-yr="${yi}" data-ri="${ri}" ${r.off ? '' : 'checked'} title="تضمين الراوند في الحساب"></td>
+      <td>${n + 1}</td>${all ? `<td>${esc(y.name)}</td>` : ''}
+      <td class="name"><a class="go" data-yr="${yi}" data-tab="${ri}">${esc(r.name)}</a></td>
+      <td>${r.rows.length}</td><td>${fmt(s.fee)}</td><td class="paid">${fmt(s.paid)}</td>
+      <td class="rem ${Math.abs(s.rem) < 1e-9 ? 'zero' : s.rem > 0 ? 'pos' : 'neg'}">${fmt(s.rem)}</td></tr>`;
+  }).join('');
+  const title = all ? 'الإجمالي الكلي (المحسوب فقط)' : 'إجمالي السنة (المحسوب فقط)';
+  $('view').innerHTML = `
+  <div class="cards">
+    <div class="card"><small>إجمالي المطلوب</small><b>${fmt(T.fee)}</b></div>
+    <div class="card"><small>إجمالي المدفوع</small><b style="color:var(--ok)">${fmt(T.paid)}</b></div>
+    <div class="card"><small>إجمالي الباقي</small><b style="color:var(--bad)">${fmt(T.rem)}</b></div>
+    <div class="card"><small>الراوندس المحسوبة / المشتركين</small><b>${inc} من ${list.length} / ${T.cnt}</b></div>
+  </div>
+  <div class="bar"><button id="printBtn">طباعة</button></div>
+  <div class="tablebox"><table>
+    <thead><tr><th>حساب</th><th>#</th>${all ? '<th>السنة</th>' : ''}<th class="name">الراوند</th><th>المشتركين</th><th>المطلوب</th><th>المدفوع</th><th>الباقي</th></tr></thead>
+    <tbody>${rows}</tbody>
+    <tfoot><tr><td></td><td></td>${all ? '<td></td>' : ''}<td class="name">${title}</td><td>${T.cnt}</td><td>${fmt(T.fee)}</td><td>${fmt(T.paid)}</td><td>${fmt(T.rem)}</td></tr></tfoot>
+  </table></div>
+  <p class="note">شيل العلامة من المربع جنب أي راوند عشان يتشال من الحساب الجامع.</p>`;
+}
+
+document.addEventListener('input', e => {
+  const el = e.target;
+  if (el.id === 'yn') {
+    yr().name = el.value; save();
+    const tb = document.querySelector('[data-year="' + S.year + '"]');
+    if (tb) tb.textContent = el.value || 'سنة';
+    return;
+  }
+  if (el.id === 'rn') { cur().name = el.value; save(); renderTabs2Only(); return; }
+  if (!el.dataset.k) return;
+  const r = cur(), x = r.rows[+el.dataset.r], k = el.dataset.k;
+  if (k === 'name' || k === 'fee') x[k] = el.value;
+  else x.pays[+k.slice(1)] = el.value;
+  save(); calc();
+});
+function renderTabs2Only() {
+  const f = document.activeElement, id = f && f.id, pos = f && f.selectionStart;
+  renderTabs();
+  const el = id && $(id); if (el) { el.focus(); try { el.setSelectionRange(pos, pos); } catch (e) {} }
+}
+
+document.addEventListener('change', e => {
+  const el = e.target;
+  if (el.dataset.ri === undefined) return;
+  S.years[+el.dataset.yr].rounds[+el.dataset.ri].off = !el.checked;
+  save(); renderSummary();
+});
+
+let armTimer;
+function arm(t, fn) {
+  if (t.dataset.armed) { clearTimeout(armTimer); fn(); return; }
+  t.dataset.armed = 1; t.classList.add('armed');
+  const old = t.textContent; t.textContent = 'اضغط تاني للتأكيد';
+  armTimer = setTimeout(() => { delete t.dataset.armed; t.classList.remove('armed'); t.textContent = old; }, 3000);
+}
+
+document.addEventListener('click', e => {
+  const t = e.target;
+  const yb = t.closest('[data-year]');
+  if (yb) { S.year = yb.dataset.year === 'all' ? 'all' : +yb.dataset.year; S.active = 0; save(); render(); return; }
+  if (t.id === 'addYear') {
+    const last = S.years[S.years.length - 1];
+    const n = parseInt(last && last.name, 10);
+    S.years.push(newYear(isNaN(n) ? 'سنة جديدة' : String(n + 1)));
+    S.year = S.years.length - 1; S.active = 0; save(); render(); return;
+  }
+  if (t.id === 'delYear') {
+    arm(t, () => { S.years.splice(S.year, 1); if (!S.years.length) S.years.push(newYear(thisYear)); S.year = 0; S.active = 0; save(); render(); });
+    return;
+  }
+  const tab = t.closest('[data-tab]');
+  if (tab) {
+    if (tab.dataset.yr !== undefined) S.year = +tab.dataset.yr;
+    S.active = tab.dataset.tab === 'sum' ? 'sum' : +tab.dataset.tab; save(); render(); return;
+  }
+  if (t.id === 'addRound') { const rs = yr().rounds; rs.push(newRound(rs.length + 1)); S.active = rs.length - 1; save(); render(); return; }
+  if (t.id === 'printBtn') { window.print(); return; }
+  if (S.year === 'all' || S.active === 'sum') return;
+  const r = cur();
+  const del = t.closest('[data-del]');
+  if (del) {
+    r.rows.splice(+del.dataset.del, 1);
+    if (!r.rows.length) r.rows.push({ name: '', fee: '', pays: [] });
+    save(); renderRound(); return;
+  }
+  if (t.id === 'addRow') {
+    r.rows.push({ name: '', fee: '', pays: [] }); save(); renderRound();
+    const ins = document.querySelectorAll('td.name input'); ins[ins.length - 1].focus();
+  } else if (t.id === 'addCol') { r.cols++; save(); renderRound(); }
+  else if (t.id === 'delCol') {
+    if (r.cols <= 1) return;
+    r.cols--; r.rows.forEach(x => x.pays.length = Math.min(x.pays.length, r.cols));
+    save(); renderRound();
+  } else if (t.id === 'delRound') {
+    arm(t, () => { yr().rounds.splice(S.active, 1); S.active = 0; save(); render(); });
+  }
+});
+
+render();
+</script>
+</body>
+</html>
